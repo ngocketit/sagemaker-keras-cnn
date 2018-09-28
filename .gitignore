@@ -1,0 +1,5 @@
+*.swp
+*.swo
+.DS_store
+__pycache__
+data

@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+import boto3
+import sagemaker as sage
+import config as conf
+
+# IAM role which is similar to that of notebook instance
+role = 'arn:aws:iam::339869163430:role/service-role/AmazonSageMaker-ExecutionRole-20180915T010288'
+boto3.setup_default_session(profile_name=conf.AWS_PROFILE)
+sess = sage.Session()
+account_number = sess.boto_session.client('sts').get_caller_identity()['Account']
+region = sess.boto_session.region_name
+
+image = '{}.dkr.ecr.{}.amazonaws.com/{}:latest'.format(account_number, region, conf.IMAGE_BASE_NAME)
+s3_bucket = 'sagemaker-{}-{}'.format(region, account_number)
+s3_prefix = conf.S3_BUCKET_PREFIX
+
+cnn = sage.estimator.Estimator(image,
+                               role,
+                               1,
+                               'ml.c4.2xlarge',
+                               output_path='s3://{}/{}/output'.format(s3_bucket, s3_prefix),
+                               sagemaker_session=sess)
+cnn.fit('s3://{}/{}/data'.format(s3_bucket, s3_prefix))
+predictor = cnn.deploy(1, 'ml.m4.xlarge')
+print(predictor)

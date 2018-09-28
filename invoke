@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+import boto3
+import argparse
+import os
+import cv2
+import config as conf
+
+boto3.setup_default_session(profile_name=conf.AWS_PROFILE)
+
+def invoke(files):
+    sess = boto3.session.Session()
+    region = sess.region_name
+    sage = boto3.client('sagemaker')
+    endpoints = sage.list_endpoints(NameContains=conf.IMAGE_BASE_NAME,
+                                    StatusEquals='InService')
+
+    if not endpoints or len(endpoints['Endpoints']) < 1:
+        print('No endpoint available')
+        return
+    endpoint = None
+
+    if len(endpoints['Endpoints']) == 1:
+        endpoint = endpoints['Endpoints'][0]['EndpointName']
+    else:
+        for i in range(0, len(endpoints['Endpoints'])):
+            print('{}. {}'.format(i + 1, endpoints['Endpoints'][i]['EndpointName']))
+
+        answer = input('Please select an endpoint number: ')
+        endpoint = endpoints['Endpoints'][int(answer) - 1]['EndpointName']
+
+    sage_runtime = boto3.client('runtime.sagemaker', region_name=region)
+    for file_path in files:
+        if not os.path.exists(file_path):
+            continue
+
+        img = cv2.imread(file_path)
+        img = cv2.resize(img, (150, 150))
+        _, img_encoded = cv2.imencode('.jpg', img)
+
+        print('Invoking endpoint {} for image {}'.format(endpoint, file_path))
+        response = sage_runtime.invoke_endpoint(
+            EndpointName=endpoint,
+            Body=img_encoded.tostring(),
+            ContentType='image/jpeg')
+
+        if response and response['Body']:
+            response['Body'] = response['Body'].read().decode('utf-8')
+
+        print(response)
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('images', nargs='+')
+args = parser.parse_args()
+
+invoke(args.images)
+
+
